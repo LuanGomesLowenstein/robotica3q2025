@@ -1,16 +1,12 @@
 import cv2
 import numpy as np
-import os # Usado para limpar o console
+import os 
 
-# Lista global para armazenar os pontos de clique
+# Para calibração
 pontos_pixel_clicados = []
 imagem_calibracao = None
 
-# --- 1. SEÇÃO DE CALIBRACAO INTERATIVA (Funções) ---
-
 def clique_callback(event, x, y, flags, param):
-    """Função de callback do mouse."""
-    # Esta declaração 'global' está CORRETA, pois está DENTRO da função
     global pontos_pixel_clicados, imagem_calibracao 
     
     if event == cv2.EVENT_LBUTTONDOWN and len(pontos_pixel_clicados) < 3:
@@ -23,10 +19,9 @@ def clique_callback(event, x, y, flags, param):
             print(f"  Ponto 2/3 (Eixo X - 600,0) definido em pixel: {x, y}")
         elif len(pontos_pixel_clicados) == 3:
             print(f"  Ponto 3/3 (Eixo Y - 0,400) definido em pixel: {x, y}")
-            print("\n✅ Calibração concluída! Pressione qualquer tecla...")
+            print("\nCalibração concluída! Pressione qualquer tecla...")
 
 def redimensionar_imagem(img, largura_desejada):
-    """Redimensiona a imagem para caber na tela mantendo a proporção."""
     try:
         proporcao = largura_desejada / img.shape[1]
         altura_desejada = int(img.shape[0] * proporcao)
@@ -34,17 +29,16 @@ def redimensionar_imagem(img, largura_desejada):
         return cv2.resize(img, dimensoes, interpolation=cv2.INTER_AREA)
     except Exception as e:
         print(f"Erro ao redimensionar: {e}")
-        return img # Retorna a imagem original se falhar
+        return img
 
-# --- 2. INICIAR WEBCAM E CAPTURAR FRAME PARA CALIBRAR ---
+# Inicia a webcam, caso dê erro, tentar alterar o número 0 (múltiplas webcam)
 
 cap = cv2.VideoCapture(0) 
 if not cap.isOpened():
-    print("❌ Erro: Não foi possível abrir a webcam.")
+    print("Erro: Não foi possível abrir a webcam.")
     print("Tente alterar o '0' em cv2.VideoCapture(0) para 1 ou 2.")
     exit()
 
-print("--- 🤖 AGUARDANDO CALIBRACAO ---")
 print("Webcam aberta. Posicione a câmera.")
 print("Pressione 'c' para capturar um frame e iniciar a calibração.")
 print("Pressione 'ESC' para sair.")
@@ -58,13 +52,13 @@ while True:
         break
         
     frame_exibicao = redimensionar_imagem(frame, 1000)
-    cv2.imshow("CALIBRACAO - Pressione 'c' para capturar", frame_exibicao)
+    cv2.imshow("Calibração - Pressione 'c' para capturar", frame_exibicao)
     
     key = cv2.waitKey(1) & 0xFF
     if key == ord('c'):
         frame_calibracao = frame.copy() # Congela o frame
-        print("\nFrame capturado! Iniciando calibração...")
-        cv2.destroyWindow("CALIBRACAO - Pressione 'c' para capturar")
+        print("\nFrame capturado, realizando calibração")
+        cv2.destroyWindow("Calibração - Pressione 'c' para capturar")
         break
     elif key == 27: # ESC
         print("Saindo...")
@@ -72,59 +66,53 @@ while True:
         cv2.destroyAllWindows()
         exit()
 
-# --- 3. EXECUTAR CALIBRACAO INTERATIVA (no frame congelado) ---
-
-# *** INÍCIO DA CORREÇÃO ***
-# A linha 'global imagem_calibracao' foi REMOVIDA daqui, pois é desnecessária e incorreta no escopo global.
-# A variável 'imagem_calibracao' já foi definida como 'None' no topo do script.
-# *** FIM DA CORREÇÃO ***
 imagem_calibracao = redimensionar_imagem(frame_calibracao, 1000)
 
-cv2.namedWindow("CALIBRACAO - Clique em 3 pontos")
-cv2.setMouseCallback("CALIBRACAO - Clique em 3 pontos", clique_callback)
+cv2.namedWindow("Calibração - Clique em 3 pontos")
+cv2.setMouseCallback("Calibração - Clique em 3 pontos", clique_callback)
 
-print("  1. Clique na ORIGEM (0, 0)")
-print("  2. Clique no ponto do EIXO X (600, 0)")
-print("  3. Clique no ponto do EIXO Y (0, 400)")
+print("1. Clique na ORIGEM (0, 0)")
+print("2. Clique no ponto do EIXO X (600, 0)")
+print("3. Clique no ponto do EIXO Y (0, 400)")
 print("\nPressione qualquer tecla na janela após os 3 cliques.")
 
 while len(pontos_pixel_clicados) < 3:
-    cv2.imshow("CALIBRACAO - Clique em 3 pontos", imagem_calibracao)
+    cv2.imshow("Calibração - Clique em 3 pontos", imagem_calibracao)
     if cv2.waitKey(1) & 0xFF == 27: # Sair com 'ESC'
         print("Calibração cancelada.")
         cap.release()
         cv2.destroyAllWindows()
         exit()
         
-cv2.imshow("CALIBRACAO - Clique em 3 pontos", imagem_calibracao)
+cv2.imshow("Calibração - Clique em 3 pontos", imagem_calibracao)
 cv2.waitKey(0)
-cv2.destroyWindow("CALIBRACAO - Clique em 3 pontos")
+cv2.destroyWindow("Calibração - Clique em 3 pontos")
 
-# --- 4. CÁLCULO DA TRANSFORMAÇÃO ---
+# Transformação da imagem
 escala = frame_calibracao.shape[1] / imagem_calibracao.shape[1]
 pts_pixel = np.float32(pontos_pixel_clicados) * escala
 
 pts_desenho = np.float32([
-    [0, 0],      # Ponto 1 (Origem)
-    [600, 0],    # Ponto 2 (Eixo X)
-    [0, 400]     # Ponto 3 (Eixo Y)
+    [0, 0],      #Ponto 1 (Origem)
+    [600, 0],    #Ponto 2 (Eixo X)
+    [0, 400]     #Ponto 3 (Eixo Y)
 ])
 
 try:
     matriz_transformacao = cv2.getAffineTransform(pts_pixel, pts_desenho)
-    print("✅ Matriz de calibração calculada com sucesso.")
-    print("\n--- 🚀 INICIANDO DETECCAO EM TEMPO REAL ---")
-    print("Pressione 'q' na janela de vídeo para sair.")
+    print("Matriz de calibração calculada com sucesso.")
+    print("\nIniciando dettecção")
+    print("Pressione 'q' na janela da webcam para sair.")
 except cv2.error as e:
-    print(f"❌ Erro ao calcular a matriz: {e}")
+    print(f"Erro ao calcular a matriz: {e}")
     cap.release()
     exit()
 
-# --- 5. LOOP PRINCIPAL DE DETECÇÃO (EM TEMPO REAL) ---
+#Detecção
 
-MIN_AREA = 1500 
-MIN_SOLIDITY = 0.9
-LIMIAR_INTENSIDADE_DESTINO = 180 # Ajuste se necessário
+MIN_AREA = 1500  #Ajuste se necessário
+MIN_SOLIDITY = 0.9  #Ajuste se necessário
+LIMIAR_INTENSIDADE_DESTINO = 180 #Ajuste se necessário
 
 while True:
     ret, frame = cap.read()
@@ -216,10 +204,10 @@ while True:
         cv2.putText(imagem_resultado, texto, (cX_pixel - 70, cY_pixel - 15), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-    # --- 6. Exibir Resultados (Console e Janelas) ---
+    #Exibir resultados
 
     os.system('cls' if os.name == 'nt' else 'clear') 
-    print("--- 🤖 RESULTADOS PARA ROBOTSTUDIO (AO VIVO) ---")
+    print("Resultados")
     
     if not pecas_encontradas:
         print("Nenhuma peça ou alvo retangular encontrado.")
@@ -231,16 +219,16 @@ while True:
             print(f"  Coords (Mundo): X = {peca['coords_mundo'][0]}, Y = {peca['coords_mundo'][1]}")
             print(f"  Angulo (Mundo): {peca['angulo_mundo']} graus")
             print(f"  (Coords Pixel): u = {peca['centro_pixel'][0]}, v = {peca['centro_pixel'][1]}\n")
-    print("-------------------------------------------------")
-    print("Pressione 'q' na janela de vídeo para SAIR.")
+    print("____________________________________________")
+    print("\nPressione 'q' na janela da webcam para sair.")
 
     cv2.imshow("Binaria", redimensionar_imagem(binaria, 800))
     cv2.imshow("Resultado Final", redimensionar_imagem(imagem_resultado, 800))
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("Encerrando...")
+        print("Fechando...")
         break
 
-# --- 7. Limpeza Final ---
 cap.release()
+
 cv2.destroyAllWindows()
